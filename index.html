@@ -70,6 +70,7 @@ nav button.plus{background:var(--g);color:#fff;font-weight:700;font-size:14px}
 .sheet{background:var(--bg);width:100%;max-width:480px;max-height:92vh;overflow:auto;border-radius:20px 20px 0 0;padding:16px 16px calc(20px + env(safe-area-inset-bottom,0))}
 .x{width:44px;height:44px;border-radius:12px;border:1px solid var(--line);background:var(--card);font-size:18px}
 .toast{position:fixed;left:50%;bottom:92px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;z-index:30;max-width:92%;display:flex;gap:14px;align-items:center}
+.toast[hidden]{display:none}
 .toast button{background:none;border:0;color:inherit;font-weight:700;text-decoration:underline;min-height:32px}
 .empty{text-align:center;color:var(--mut);padding:26px 10px}
 .badge{font-size:12px;border-radius:10px;padding:4px 8px;background:var(--gl);color:var(--gd);font-weight:600;white-space:nowrap}.badge.due{background:var(--rl);color:var(--rd)}
@@ -86,7 +87,7 @@ nav button.plus{background:var(--g);color:#fff;font-weight:700;font-size:14px}
 /* ====== SETTINGS: paste your Apps Script Web App URL here ====== */
 var API_URL='https://script.google.com/macros/s/AKfycbzDKUswhZ_oLPFtxynHm2ESms4fgGBTSxdNpP7YMmt6A3AwwAD5QsPeUFFR91K9ITkjXA/exec';
 /* =============================================================== */
-var KEY=localStorage.getItem('mt_key')||'',D=null,tab='home',month='',search='',err='',addM=null,exp={},showF=false,shown=false,deferred=null;
+var KEY='99317923e7724fd1',D=null,tab='home',month='',search='',err='',addM=null,exp={},showF=false,shown=false,deferred=null;
 var flt={type:'',cat:'',acct:'',min:'',max:''};
 var $=function(s){return document.querySelector(s)};
 var isIos=/iphone|ipad|ipod/i.test(navigator.userAgent),standalone=matchMedia('(display-mode: standalone)').matches||navigator.standalone;
@@ -356,7 +357,7 @@ function planView(){
  w.append(h('div',{class:'sec'},h('h2',{text:'Data and app'})));
  w.append(h('div',{class:'card'},h('div',{class:'acts',style:'margin:0'},h('button',{class:'btn ghost',onclick:function(){exportCsv(false)}},'Export this month'),h('button',{class:'btn ghost',onclick:function(){exportCsv(true)}},'Export all')),
   h('div',{class:'mut',style:'margin-top:10px',text:'A backup copy of your Sheet is saved to Google Drive on the 1st of every month.'}),
-  h('div',{class:'acts'},deferred?h('button',{class:'btn',onclick:doInstall},'Install app'):null,h('button',{class:'btn ghost',onclick:function(){if(confirm('Sign out of this device?')){localStorage.removeItem('mt_key');localStorage.removeItem('mt_cache');KEY='';D=null;render()}}},'Sign out'))));
+  h('div',{class:'acts'},deferred?h('button',{class:'btn',onclick:doInstall},'Install app'):null)));
  return w}
 
 /* ---------- Payment reminder popup (on open) ---------- */

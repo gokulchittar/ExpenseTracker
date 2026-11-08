@@ -236,7 +236,7 @@ function homeView(){
  if(t.exp){ins.push('Daily average: '+money(t.exp/day));if(isCur)ins.push('Projected month-end spend: '+money(t.exp/day*dim))}
  var bi=null;Object.keys(cs).forEach(function(c){var d=cs[c]-(pc[c]||0);if(pc[c]&&d>0&&(!bi||d>bi.d))bi={c:c,d:d,p:Math.round(d/pc[c]*100)}});
  if(bi)ins.push('Biggest increase: '+bi.c+' up '+bi.p+'% ('+money(bi.d)+' more than last month)');
- L.filter(function(e){var c=D.sum.cats[e.cat];return e.type==='Expense'&&!e.loanId&&c&&c.n>=4&&e.amount>=500&&e.amount>3*c.s/c.n}).slice(0,3).forEach(function(e){ins.push('Unusual: '+money(e.amount)+' at '+(e.place||e.cat)+' on '+fullDate(e.date))});
+ L.filter(function(e){var c=D.sum.cats[e.cat];return e.type==='Expense'&&!e.loanId&&!e.debtId&&c&&c.n>=4&&e.amount>=500&&e.amount>3*c.s/c.n}).slice(0,3).forEach(function(e){ins.push('Unusual: '+money(e.amount)+' at '+(e.place||e.cat)+' on '+fullDate(e.date))});
  if(ins.length)w.append(h('div',{class:'card'},h('h2',{text:'Insights'}),ins.map(function(s){return h('div',{style:'padding:4px 0',text:'\u2022 '+s})})));
  if(!L.length)w.append(h('div',{class:'card empty'},'No entries in '+mLabel(month)+'. Tap "+ Add" to record one.'));
  var rows=Object.keys(cs).map(function(k){return{n:k,v:cs[k]}}).sort(function(a,b){return b.v-a.v});
@@ -288,9 +288,9 @@ function entriesView(){
   if(!L.length){box.append(h('div',{class:'empty',text:'No entries found.'}));return}
   box.append(h('div',{class:'mut',style:'margin-top:8px',text:L.length+' entries \u00B7 '+money(tot(L).exp)+' spent \u00B7 '+money(tot(L).inc)+' income'}));
   var last='';L.forEach(function(e){if(e.date!==last){box.append(h('div',{class:'day',text:dayLabel(e.date)}));last=e.date}
-   var tr=e.type==='Transfer',auto=!!e.loanId,sub=[tr?an(e.acct)+' \u2192 '+an(e.to):e.cat+(e.sub?' \u203A '+e.sub:''),tr?'':an(e.acct),e.note&&!auto?e.note:''].filter(Boolean).join(' \u00B7 ');
+   var tr=e.type==='Transfer',auto=!!(e.loanId||e.debtId),sub=[tr?an(e.acct)+' \u2192 '+an(e.to):e.cat+(e.sub?' \u203A '+e.sub:''),tr?'':an(e.acct),e.note&&!auto?e.note:''].filter(Boolean).join(' \u00B7 ');
    var r=h('button',{type:'button',class:'item','aria-label':(e.place||e.cat||'Transfer')+', '+money(e.amount)},h('div',{class:'l'},h('b',null,e.place||e.cat||'Transfer',auto?h('span',{class:'tag',text:'Auto'}):null),h('div',{class:'mut',text:sub})),h('div',{class:'a '+(e.type==='Income'?'pos':tr?'':'neg'),text:(e.type==='Income'?'+':tr?'':'-')+money(e.amount)}));
-   r.addEventListener('click',function(){if(auto){toast('EMI is posted automatically. Close or delete the loan to stop it.');return}editEntry(e)});box.append(r)})}
+   r.addEventListener('click',function(){if(auto){toast(e.debtId?'This entry is managed from the Money tab (Lent and borrowed).':'EMI is posted automatically. Close or delete the loan to stop it.');return}editEntry(e)});box.append(r)})}
  s.addEventListener('input',function(){search=s.value;draw()});w.append(box);draw();return w}
 function editEntry(e){var m={id:e.id,type:e.type,amount:String(e.amount),cat:e.cat,sub:e.sub||'',place:e.place,acct:e.acct,to:e.to||'',date:e.date,note:e.note};
  openSheet('Edit entry',entryForm(m,function(it){return save('entries',it).then(function(){closeSheet();toast('Changes saved');render()})},h('button',{class:'btn ghost full',onclick:function(){delEntry(e)}},'Delete entry')))}
@@ -318,9 +318,17 @@ function accForm(a,kind){var k0=a?(a.kind||'normal'):(kind||'normal');
 function ccNext(a){if(!a.dueDay)return '';var ym=D.today.slice(0,7),d=dueD(ym,a.dueDay);return d>=D.today?d:dueD(addMo(ym,1),a.dueDay)}
 function payBill(a){var N=D.accounts.filter(function(x){return x.kind!=='credit'}),o=N.filter(function(x){return x.name==='Bank'})[0]||N[0],owed=Math.max(0,-((D.sum.bal||{})[a.id]||0));
  addM=newM();addM.type='Transfer';addM.to=a.id;addM.acct=o?o.id:'';if(owed)addM.amount=String(Math.round(owed*100)/100);tab='add';render();toast('Choose the account that pays this bill')}
-function debtForm(){ask('Add lent / borrowed',[{k:'dir',l:'Type',t:'select',o:[['lent','I lent money'],['borrowed','I borrowed money']]},{k:'who',l:'Person name'},{k:'amount',l:'Amount (\u20B9)',t:'number'},{k:'date',l:'Date',t:'date',v:D.today},{k:'due',l:'Return by (optional)',t:'date',opt:true},{k:'note',l:'Note (optional)',opt:true}],function(v){
- if(!(num(v.amount)>0))throw new Error('Enter an amount');return save('debts',{dir:v.dir,who:v.who.trim(),amount:num(v.amount),date:v.date,due:v.due||'',note:v.note||'',pays:[]}).then(render)})}
-function repay(d){ask('Repayment from '+d.who,[{k:'a',l:'Amount (\u20B9), pending '+money(rem(d)),t:'number',v:rem(d)},{k:'d',l:'Date',t:'date',v:D.today}],function(v){var a=num(v.a);if(!(a>0))throw new Error('Enter an amount');d.pays=(d.pays||[]).concat([{d:v.d,a:a}]);return save('debts',d).then(render)},null,'Add repayment')}
+function acctOpts(){return D.accounts.map(function(a){return[a.id,a.name+(a.kind==='credit'?' (credit card)':'')]})}
+function dEntry(d,n,type,amt,date,acct){return{id:'dbt_'+d.id+'_'+n,date:date,type:type,amount:amt,
+ cat:type==='Expense'?(d.dir==='lent'?'Lent money':'Repaid borrowed money'):(d.dir==='borrowed'?'Borrowed money':'Lent money returned'),
+ sub:'',place:d.who,acct:acct,to:'',note:(d.dir==='lent'?'Lent to ':'Borrowed from ')+d.who,debtId:d.id}}
+function debtForm(){ask('Add lent / borrowed',[{k:'dir',l:'Type',t:'select',o:[['lent','I lent money'],['borrowed','I borrowed money']]},{k:'who',l:'Person name'},{k:'amount',l:'Amount (\u20B9)',t:'number'},{k:'acct',l:'Account (money goes out of / into)',t:'select',o:acctOpts(),v:newM().acct},{k:'date',l:'Date',t:'date',v:D.today},{k:'due',l:'Return by (optional)',t:'date',opt:true},{k:'note',l:'Note (optional)',opt:true}],function(v){
+ var a=num(v.amount);if(!(a>0))throw new Error('Enter an amount');
+ var d={id:'d'+Math.random().toString(36).slice(2,12),dir:v.dir,who:v.who.trim(),amount:a,date:v.date,due:v.due||'',note:v.note||'',pays:[]};
+ return save('debts',d).then(function(){return save('entries',dEntry(d,0,d.dir==='lent'?'Expense':'Income',a,d.date,v.acct))}).then(render)})}
+function repay(d){ask('Repayment '+(d.dir==='lent'?'from ':'to ')+d.who,[{k:'a',l:'Amount (\u20B9), pending '+money(rem(d)),t:'number',v:rem(d)},{k:'acct',l:'Account',t:'select',o:acctOpts(),v:newM().acct},{k:'d',l:'Date',t:'date',v:D.today}],function(v){
+ var a=num(v.a);if(!(a>0))throw new Error('Enter an amount');d.pays=(d.pays||[]).concat([{d:v.d,a:a}]);var n=d.pays.length;
+ return save('debts',d).then(function(){return save('entries',dEntry(d,n,d.dir==='lent'?'Income':'Expense',a,v.d,v.acct))}).then(render)},null,'Add repayment')}
 function loanForm(){ask('Add EMI loan',[{k:'name',l:'Loan name',p:'Car loan'},{k:'type',l:'Loan type',t:'select',o:['Home','Vehicle','Personal','Gold','Education','Other']},{k:'lender',l:'Lender',opt:true},{k:'amount',l:'Loan amount (\u20B9)',t:'number'},{k:'rate',l:'Interest % a year',t:'number'},{k:'emi',l:'EMI amount (\u20B9)',t:'number'},{k:'tenure',l:'Tenure (months)',t:'number'},{k:'day',l:'EMI date each month (1-31)',t:'number'},{k:'first',l:'First EMI month',t:'month',v:addMo(D.today.slice(0,7),1)},{k:'pb',l:'EMIs already paid (old loans)',t:'number',v:'0'},{k:'acct',l:'Paid from account',t:'select',o:D.accounts.map(function(a){return[a.id,a.name]})}],function(v){
  var ten=Math.floor(num(v.tenure)),pb=Math.floor(num(v.pb)),day=Math.floor(num(v.day));
  if(ten<1||day<1||day>31)throw new Error('Check tenure and EMI date');if(pb>=ten)throw new Error('EMIs already paid must be less than tenure');if(num(v.rate)<0||num(v.rate)>60)throw new Error('Rate must be 0 to 60');
@@ -349,7 +357,7 @@ function moneyView(){
    open?(dd!=null?h('span',{class:'badge'+(dd<=3?' due':''),text:dd<0?'Overdue':dd===0?'Today':'In '+dd+'d'}):null):h('span',{class:'badge',text:'Settled'})),
    h('div',{class:'big2 '+(d.dir==='lent'?'pos':'neg'),style:'margin-top:6px',text:open?money(r)+(d.dir==='lent'?' to receive':' to pay'):'\u2713 Cleared'}),
    (d.pays||[]).length?h('div',{class:'mut',text:'Repaid '+money(sum(d.pays,function(p){return p.a}))+' in '+d.pays.length+(d.pays.length===1?' payment':' payments')}):null,
-   h('div',{class:'acts'},open?h('button',{class:'btn sm',onclick:function(){repay(d)}},'Repayment'):null,h('button',{class:'btn ghost sm',onclick:function(){if(confirm('Delete this record?'))mut('del',{col:'debts',id:d.id}).then(render)}},'Delete'))))});
+   h('div',{class:'acts'},open?h('button',{class:'btn sm',onclick:function(){repay(d)}},'Repayment'):null,h('button',{class:'btn ghost sm',onclick:function(){if(confirm('Delete this record and its entries?'))mut('del',{col:'debts',id:d.id}).then(render)}},'Delete'))))});
  w.append(h('div',{class:'sec'},h('h2',{text:'EMI loans'}),h('button',{class:'btn sm',onclick:loanForm},'+ Add')));
  var loans=D.loans.map(ln);
  if(!loans.length)w.append(h('div',{class:'card empty'},'No loans. EMIs post automatically as expenses on their date.'));

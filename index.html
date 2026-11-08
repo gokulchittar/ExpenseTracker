@@ -168,6 +168,8 @@ function entryForm(m,onSave,extra){
  function draw(){
   root.replaceChildren();var tr=m.type==='Transfer',eb=h('div');
   root.append(h('div',{class:'seg'},['Expense','Income','Transfer'].map(function(t){return h('button',{type:'button',class:t==='Expense'?'exp':'','aria-pressed':String(m.type===t),onclick:function(){m.type=t;m.cat='';m.sub='';draw()}},t)})));
+  var PU=(D.sum.places||[]).filter(function(x){return x.type===m.type}).sort(function(a,b){return b.n-a.n}).slice(0,12);
+  if(!tr&&PU.length)root.append(h('label',{for:'f-mu',text:'Most used'}),sel('f-mu',[['','Choose from most used\u2026']].concat(PU.map(function(x,i){return[String(i),x.place+' \u00B7 '+x.cat+(x.sub?' \u203A '+x.sub:'')]})),'',function(v){if(v==='')return;var x=PU[+v];m.place=x.place;m.cat=x.cat;m.sub=x.sub;if(x.acct)m.acct=x.acct;draw()}));
   var amt=h('input',{class:'amt',inputmode:'decimal',placeholder:'0','aria-label':'Amount in rupees',value:m.amount,autocomplete:'off'});
   amt.addEventListener('input',function(){var v=amt.value.replace(/[^0-9.]/g,'').replace(/^(\d*\.?\d{0,2}).*$/,'$1');if(v!==amt.value)amt.value=v;m.amount=v});
   root.append(h('div',{class:'amtwrap'},h('div',{class:'mut',text:'Amount'}),h('div',{class:'row'},h('span',{'aria-hidden':'true'},'\u20B9'),amt)));
@@ -189,8 +191,7 @@ function entryForm(m,onSave,extra){
   var fill=function(){var c=hist(m.place,m.type);if(c&&!tr){m.cat=c.cat;m.sub=c.sub;if(c.acct)m.acct=c.acct;draw()}};
   paid.addEventListener('input',function(){m.place=paid.value});paid.addEventListener('change',function(){m.place=paid.value;if(!m.cat)fill()});
   root.append(h('label',{for:'f-paid',text:tr?'Note title (optional)':m.type==='Expense'?'Paid to (shop or site)':'Received from'}),paid,dl);
-  if(!tr)root.append(h('div',{class:'chips',style:'margin-top:8px'},P.sort(function(a,b){return b.n-a.n}).slice(0,6).map(function(x){return h('button',{type:'button',class:'chip',onclick:function(){m.place=x.place;m.cat=x.cat;m.sub=x.sub;if(x.acct)m.acct=x.acct;draw()}},x.place)})));
-  var A=D.accounts.map(function(a){return[a.id,a.name]});
+  var A=D.accounts.map(function(a){return[a.id,a.name+(a.kind==='credit'?' (credit card)':'')]});
   root.append(h('label',{for:'f-acct',text:tr?'From account':'Account'}),sel('f-acct',A,m.acct,function(v){m.acct=v}));
   if(tr){if(!m.to||m.to===m.acct)m.to=(D.accounts.filter(function(a){return a.id!==m.acct})[0]||{}).id||'';root.append(h('label',{for:'f-to',text:'To account'}),sel('f-to',A,m.to,function(v){m.to=v}))}
   var date=h('input',{id:'f-date',type:'date',value:m.date}),note=h('input',{id:'f-note',type:'text',maxlength:'200',value:m.note,autocomplete:'off'});
@@ -248,7 +249,7 @@ function homeView(){
   rows.forEach(function(r){var o=!!exp[r.n],pv=pc[r.n],cmp=pv?(r.v>=pv?'\u2191 ':'\u2193 ')+Math.abs(Math.round((r.v-pv)/pv*100))+'% vs last month':'';
    card.append(h('button',{type:'button',class:'catrow','aria-expanded':String(o),onclick:function(){exp[r.n]=!o;render()}},h('span',{text:(o?'\u25BE ':'\u25B8 ')+r.n}),h('span',{text:money(r.v)})),
     h('div',{class:'bar',role:'presentation'},h('i',{style:'width:'+Math.max(2,r.v/rows[0].v*100)+'%'})),
-    cmp?h('div',{class:'mut',style:'margin:-4px 0 8px 18px',text:cmp+(pv?' ('+money(pv)+')':'')}):null);
+    );if(cmp)card.append(h('div',{class:'mut',style:'margin:-4px 0 8px 18px',text:cmp+' ('+money(pv)+')'}));
    if(o)Object.keys(subs).filter(function(k){return k.indexOf(r.n+'|')===0}).sort(function(a,b){return subs[b]-subs[a]}).forEach(function(k){card.append(h('div',{class:'row subrow'},h('span',{text:k.slice(r.n.length+1)}),h('span',{text:money(subs[k])})))})});
   w.append(card)}
  var ms=[];for(var i=5;i>=0;i--)ms.push(addMo(month,-i));
@@ -302,7 +303,21 @@ function ln(l){var posted=0,max=Math.max(0,l.tenure-(l.paidBefore||0));for(var k
  var paid=Math.min(l.tenure,(l.paidBefore||0)+posted),r=l.rate/1200,f=Math.pow(1+r,paid),bal=r?l.amount*f-l.emi*(f-1)/r:l.amount-l.emi*paid,cl=l.status==='Closed';
  return Object.assign({},l,{paid:paid,bal:cl?0:Math.max(0,bal),next:!cl&&paid<l.tenure?dueD(addMo(l.first,posted),l.day):'',ends:addMo(l.first,Math.max(0,l.tenure-(l.paidBefore||0)-1))})}
 function rem(d){return d.amount-sum(d.pays||[],function(p){return p.a})}
-function accForm(a){ask(a?'Edit account':'Add account',[{k:'name',l:'Account name',v:a?a.name:'',p:'Cash'},{k:'open',l:'Opening balance (\u20B9)',t:'number',v:a?a.open:'0'}],function(v){return save('accounts',{id:a&&a.id,name:v.name.trim(),open:num(v.open)}).then(render)})}
+function accForm(a,kind){var k0=a?(a.kind||'normal'):(kind||'normal');
+ ask(a?'Edit account':k0==='credit'?'Add credit card':'Add account',[
+  {k:'name',l:'Account name',v:a?a.name:'',p:k0==='credit'?'HDFC Credit Card':'Cash'},
+  {k:'kind',l:'Type',t:'select',o:[['normal','Normal (cash, bank, UPI, debit card)'],['credit','Credit card']],v:k0},
+  {k:'open',l:'Opening balance (\u20B9). Credit card: use a negative number for money already owed',t:'number',v:a?a.open:'0'},
+  {k:'limit',l:'Credit limit (\u20B9, credit card only)',t:'number',v:a&&a.limit?a.limit:'',opt:true},
+  {k:'bill',l:'Bill date each month, 1-31 (credit card only)',t:'number',v:a&&a.billDay?a.billDay:'',opt:true},
+  {k:'due',l:'Payment due date each month, 1-31 (credit card only)',t:'number',v:a&&a.dueDay?a.dueDay:'',opt:true}],function(v){
+  var cc=v.kind==='credit',lim=num(v.limit),bd=Math.floor(num(v.bill)),dd=Math.floor(num(v.due));
+  if(cc&&!(lim>0))throw new Error('Enter the credit limit');
+  if(bd>31||dd>31||bd<0||dd<0)throw new Error('Dates must be 1 to 31');
+  return save('accounts',{id:a&&a.id,name:v.name.trim(),open:num(v.open),kind:cc?'credit':'normal',limit:cc?lim:0,billDay:cc?bd:0,dueDay:cc?dd:0}).then(render)})}
+function ccNext(a){if(!a.dueDay)return '';var ym=D.today.slice(0,7),d=dueD(ym,a.dueDay);return d>=D.today?d:dueD(addMo(ym,1),a.dueDay)}
+function payBill(a){var N=D.accounts.filter(function(x){return x.kind!=='credit'}),o=N.filter(function(x){return x.name==='Bank'})[0]||N[0],owed=Math.max(0,-((D.sum.bal||{})[a.id]||0));
+ addM=newM();addM.type='Transfer';addM.to=a.id;addM.acct=o?o.id:'';if(owed)addM.amount=String(Math.round(owed*100)/100);tab='add';render();toast('Choose the account that pays this bill')}
 function debtForm(){ask('Add lent / borrowed',[{k:'dir',l:'Type',t:'select',o:[['lent','I lent money'],['borrowed','I borrowed money']]},{k:'who',l:'Person name'},{k:'amount',l:'Amount (\u20B9)',t:'number'},{k:'date',l:'Date',t:'date',v:D.today},{k:'due',l:'Return by (optional)',t:'date',opt:true},{k:'note',l:'Note (optional)',opt:true}],function(v){
  if(!(num(v.amount)>0))throw new Error('Enter an amount');return save('debts',{dir:v.dir,who:v.who.trim(),amount:num(v.amount),date:v.date,due:v.due||'',note:v.note||'',pays:[]}).then(render)})}
 function repay(d){ask('Repayment from '+d.who,[{k:'a',l:'Amount (\u20B9), pending '+money(rem(d)),t:'number',v:rem(d)},{k:'d',l:'Date',t:'date',v:D.today}],function(v){var a=num(v.a);if(!(a>0))throw new Error('Enter an amount');d.pays=(d.pays||[]).concat([{d:v.d,a:a}]);return save('debts',d).then(render)},null,'Add repayment')}
@@ -313,9 +328,18 @@ function loanForm(){ask('Add EMI loan',[{k:'name',l:'Loan name',p:'Car loan'},{k
 function moneyView(){
  var w=h('div'),B=D.sum.bal||{};
  w.append(h('div',{class:'row'},h('h1',{text:'Money'}),h('button',{class:'btn',onclick:function(){addM=newM();addM.type='Transfer';tab='add';render()}},'\u21C4 Transfer')));
- w.append(h('div',{class:'card hero'},h('div',{class:'mut',text:'Total across accounts'}),h('div',{class:'big',text:money(sum(D.accounts,function(a){return B[a.id]||0}))})));
- D.accounts.forEach(function(a){w.append(h('button',{class:'item',type:'button',onclick:function(){accForm(a)},'aria-label':'Edit '+a.name},h('div',{class:'l'},h('b',{text:a.name}),h('div',{class:'mut',text:'Opening '+money(a.open)})),h('div',{class:'a '+((B[a.id]||0)<0?'neg':''),text:money(B[a.id]||0)})))});
+ var norm=D.accounts.filter(function(a){return a.kind!=='credit'}),cards=D.accounts.filter(function(a){return a.kind==='credit'});
+ w.append(h('div',{class:'card hero'},h('div',{class:'mut',text:'Total across accounts'}),h('div',{class:'big',text:money(sum(norm,function(a){return B[a.id]||0}))}),cards.length?h('div',{text:'Owed on credit cards: '+money(sum(cards,function(a){return Math.max(0,-(B[a.id]||0))}))}):null));
+ norm.forEach(function(a){w.append(h('button',{class:'item',type:'button',onclick:function(){accForm(a)},'aria-label':'Edit '+a.name},h('div',{class:'l'},h('b',{text:a.name}),h('div',{class:'mut',text:'Opening '+money(a.open)})),h('div',{class:'a '+((B[a.id]||0)<0?'neg':''),text:money(B[a.id]||0)})))});
  w.append(h('button',{class:'btn ghost',style:'width:100%',onclick:function(){accForm()}},'+ Add account'));
+ w.append(h('div',{class:'sec'},h('h2',{text:'Credit cards'}),h('button',{class:'btn sm',onclick:function(){accForm(null,'credit')}},'+ Add card')));
+ if(!cards.length)w.append(h('div',{class:'card empty'},'No credit card yet. Add one to track your limit, bill and payments.'));
+ cards.forEach(function(a){var bal=B[a.id]||0,owed=Math.max(0,-bal),lim=a.limit||0,p=lim?owed/lim*100:0,nd=ccNext(a),dd=nd?daysTo(nd):null;
+  w.append(h('div',{class:'card'},h('div',{class:'row'},h('div',null,h('b',{text:a.name}),h('div',{class:'mut',text:'Limit '+money(lim)+(a.billDay?' \u00B7 Bill on '+a.billDay:'')+(a.dueDay?' \u00B7 Due on '+a.dueDay:'')})),dd!=null&&owed>0?h('span',{class:'badge'+(dd<=3?' due':''),text:dd<0?'Overdue':dd===0?'Due today':'Due in '+dd+'d'}):null),
+   h('div',{class:'big2 '+(owed>0?'neg':'pos'),style:'margin-top:6px',text:owed>0?money(owed)+' owed':bal>0?money(bal)+' in credit':'Nothing owed'}),
+   h('div',{class:'bar'+(p>=80?' red':''),style:'margin-top:8px',role:'img','aria-label':Math.round(p)+'% of limit used'},h('i',{style:'width:'+Math.min(100,p)+'%'})),
+   h('div',{class:'mut',text:'Available '+money(Math.max(0,lim+bal))+' of '+money(lim)+' \u00B7 '+Math.round(p)+'% used'}),
+   h('div',{class:'acts'},h('button',{class:'btn sm',onclick:function(){payBill(a)}},'Pay bill'),h('button',{class:'btn ghost sm',onclick:function(){accForm(a)}},'Edit'))))});
  var get=0,owe=0;D.debts.forEach(function(d){var r=Math.max(0,rem(d));if(d.dir==='lent')get+=r;else owe+=r});
  w.append(h('div',{class:'sec'},h('h2',{text:'Lent and borrowed'}),h('button',{class:'btn sm',onclick:debtForm},'+ Add')));
  if(D.debts.length)w.append(h('div',{class:'card'},h('div',{class:'row'},h('span',null,'You will get ',h('b',{class:'pos',text:money(get)})),h('span',null,'You owe ',h('b',{class:'neg',text:money(owe)})))));
@@ -354,6 +378,8 @@ function planView(){
  if(!D.alerts.length)w.append(h('div',{class:'card empty'},'No reminders. Example: SIP on 5th, \u20B91000, remind 3 days before. A pop-up shows when you open the app.'));
  D.alerts.slice().sort(function(a,b){return a.date<b.date?-1:1}).forEach(function(a){var d=daysTo(a.date);
   w.append(h('button',{class:'item',type:'button',onclick:function(){alertForm(a)}},h('div',{class:'l'},h('b',{text:a.title+(a.amount?' \u00B7 '+money(a.amount):'')}),h('div',{class:'mut',text:fullDate(a.date)+' \u00B7 '+(a.rep==='monthly'?'monthly':'once')+' \u00B7 remind '+a.days+'d before'})),h('span',{class:'badge'+(d<=a.days?' due':''),text:d<0?'Overdue':d===0?'Today':'In '+d+'d'})))});
+ w.append(h('div',{class:'sec'},h('h2',{text:'Phone notifications'})));
+ w.append(h('div',{class:'card'},h('div',{class:'mut',text:'Due payments are added to a "Money Tracker" calendar in your Google Calendar. The Calendar app on your phone shows the notification at 8 AM, even when this app is closed. Reminders, EMIs, credit card bills and lent/borrowed dates are included. It updates when you change them and every morning.'}),h('button',{class:'btn full',style:'margin-top:10px',onclick:function(e){var b=e.target;b.disabled=true;api('sync').then(function(){toast('Calendar updated')}).catch(function(x){toast(x.message,null,5000)}).then(function(){b.disabled=false})}},'Sync to Google Calendar now')));
  w.append(h('div',{class:'sec'},h('h2',{text:'Data and app'})));
  w.append(h('div',{class:'card'},h('div',{class:'acts',style:'margin:0'},h('button',{class:'btn ghost',onclick:function(){exportCsv(false)}},'Export this month'),h('button',{class:'btn ghost',onclick:function(){exportCsv(true)}},'Export all')),
   h('div',{class:'mut',style:'margin-top:10px',text:'A backup copy of your Sheet is saved to Google Drive on the 1st of every month.'}),
@@ -366,6 +392,7 @@ function remind(){
  D.alerts.forEach(function(a){var d=daysTo(a.date);if(d<=a.days&&!sn(a.id))items.push({id:a.id,t:a.title,amt:a.amount,d:d,date:a.date,a:a})});
  D.loans.map(ln).forEach(function(l){if(l.next){var d=daysTo(l.next);if(d<=3&&!sn(l.id))items.push({id:l.id,t:'EMI: '+l.name,amt:l.emi,d:d,date:l.next})}});
  D.debts.forEach(function(x){if(x.due&&rem(x)>0.005){var d=daysTo(x.due);if(d<=3&&!sn(x.id))items.push({id:x.id,t:(x.dir==='lent'?x.who+' should repay you':'Repay '+x.who),amt:rem(x),d:d,date:x.due})}});
+ D.accounts.forEach(function(a){if(a.kind==='credit'){var o=Math.max(0,-((D.sum.bal||{})[a.id]||0)),nd=ccNext(a);if(o>0&&nd){var d=daysTo(nd);if(d<=3&&!sn('cc_'+a.id))items.push({id:'cc_'+a.id,t:'Pay '+a.name+' bill',amt:o,d:d,date:nd})}}});
  if(!items.length)return;items.sort(function(a,b){return a.d-b.d});
  var box=h('div');
  function drawP(){box.replaceChildren();if(!items.length){closeSheet();return}
